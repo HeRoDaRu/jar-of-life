@@ -1,7 +1,26 @@
+document.addEventListener(‘DOMContentLoaded’, () => {
+
 // ─── CONFIG ──────────────────────────────────────────────────────────────────
-const CELL    = 7;     // px per cell
 const FPS     = 12;    // simulation steps per second
 const DENSITY = 0.28;  // initial live cell probability
+
+// Jar grid proportions — width:height ratio stays fixed
+const COLS = 54;
+const ROWS = 78;
+
+// ─── RESPONSIVE SIZING ───────────────────────────────────────────────────────
+// Calculate the largest cell size that fits the available screen space.
+function computeCell() {
+const availW = window.innerWidth  * 0.92;
+const availH = window.innerHeight * 0.72;
+const byW    = Math.floor(availW / COLS);
+const byH    = Math.floor(availH / ROWS);
+return Math.max(3, Math.min(byW, byH));
+}
+
+let CELL = computeCell();
+let W    = COLS * CELL;
+let H    = ROWS * CELL;
 
 // ─── CANVAS SETUP ────────────────────────────────────────────────────────────
 const canvas = document.getElementById(‘c’);
@@ -9,31 +28,29 @@ const glassC = document.getElementById(‘glass’);
 const ctx    = canvas.getContext(‘2d’);
 const gctx   = glassC.getContext(‘2d’);
 
-// Jar dimensions in cells
-const COLS = 54;
-const ROWS = 78;
-
-const W = COLS * CELL;
-const H = ROWS * CELL;
-
+function resizeCanvases() {
+CELL = computeCell();
+W    = COLS * CELL;
+H    = ROWS * CELL;
 canvas.width  = glassC.width  = W;
 canvas.height = glassC.height = H;
+}
+
+resizeCanvases();
 
 // ─── JAR PATH ────────────────────────────────────────────────────────────────
-// Defined as a Path2D so we can use isPointInPath() for the cell mask
-// and for hit-testing mouse/touch input.
-const JAR = new Path2D();
+let JAR  = new Path2D();
+let mask = new Uint8Array(COLS * ROWS);
 
-(function buildJar() {
+function buildJar() {
+JAR = new Path2D();
 const cx = W / 2;
 
-// Half-widths at key horizontal sections
-const neckHalf  = W * 0.14;  // narrowest part of the neck
-const lipHalf   = W * 0.18;  // opening at the very top
-const bellyHalf = W * 0.42;  // widest point of the jar
-const baseHalf  = W * 0.38;  // bottom base (slightly narrower than belly)
+const neckHalf  = W * 0.14;
+const lipHalf   = W * 0.18;
+const bellyHalf = W * 0.42;
+const baseHalf  = W * 0.38;
 
-// Vertical key positions
 const yTop      = H * 0.03;
 const yLip      = H * 0.07;
 const yNeckBot  = H * 0.17;
@@ -44,27 +61,21 @@ const yBase     = H * 0.97;
 JAR.moveTo(cx - lipHalf, yTop);
 JAR.lineTo(cx + lipHalf, yTop);
 
-// Right side: lip → neck → shoulder → belly → base
-JAR.bezierCurveTo(cx + lipHalf,  yLip,      cx + neckHalf, yLip,      cx + neckHalf, yNeckBot);
+JAR.bezierCurveTo(cx + lipHalf,  yLip,      cx + neckHalf,  yLip,      cx + neckHalf,  yNeckBot);
 JAR.bezierCurveTo(cx + neckHalf, yBellyTop, cx + bellyHalf, yBellyTop, cx + bellyHalf, yBellyTop + (yBellyBot - yBellyTop) * 0.1);
-JAR.bezierCurveTo(cx + bellyHalf, yBellyBot, cx + baseHalf, yBellyBot, cx + baseHalf, yBase);
+JAR.bezierCurveTo(cx + bellyHalf, yBellyBot, cx + baseHalf, yBellyBot, cx + baseHalf,  yBase);
 
-// Base
 JAR.lineTo(cx - baseHalf, yBase);
 
-// Left side (mirror of right)
 JAR.bezierCurveTo(cx - baseHalf,  yBellyBot, cx - bellyHalf, yBellyBot, cx - bellyHalf, yBellyTop + (yBellyBot - yBellyTop) * 0.1);
 JAR.bezierCurveTo(cx - bellyHalf, yBellyTop, cx - neckHalf,  yBellyTop, cx - neckHalf,  yNeckBot);
 JAR.bezierCurveTo(cx - neckHalf,  yLip,      cx - lipHalf,   yLip,      cx - lipHalf,   yTop);
 
 JAR.closePath();
-})();
+}
 
-// ─── CELL MASK ───────────────────────────────────────────────────────────────
-// Precomputed once at startup. 1 = cell is inside the jar, 0 = outside.
-// Avoids calling isPointInPath() on every cell every tick.
-const mask = new Uint8Array(COLS * ROWS);
-
+function buildMask() {
+mask = new Uint8Array(COLS * ROWS);
 for (let row = 0; row < ROWS; row++) {
 for (let col = 0; col < COLS; col++) {
 const px = col * CELL + CELL / 2;
@@ -74,6 +85,10 @@ mask[row * COLS + col] = 1;
 }
 }
 }
+}
+
+buildJar();
+buildMask();
 
 // ─── STATE ───────────────────────────────────────────────────────────────────
 let grid     = new Uint8Array(COLS * ROWS);
@@ -128,42 +143,38 @@ continue;
 
 }
 
-// Swap buffers — avoids allocating a new array each tick
 [grid, next] = [next, grid];
 }
 
 // ─── SOIL TEXTURE ────────────────────────────────────────────────────────────
-// Generated once into an offscreen canvas and reused every render frame.
-const soilCanvas    = document.createElement(‘canvas’);
-soilCanvas.width    = W;
-soilCanvas.height   = H;
-const sctx          = soilCanvas.getContext(‘2d’);
+const soilCanvas = document.createElement(‘canvas’);
+const sctx       = soilCanvas.getContext(‘2d’);
 
-(function buildSoil() {
+function buildSoil() {
+soilCanvas.width  = W;
+soilCanvas.height = H;
 const imageData = sctx.createImageData(W, H);
 const d         = imageData.data;
 for (let i = 0; i < d.length; i += 4) {
-const v = 18 + Math.random() * 16 | 0;
-d[i]     = v + 8;   // R
-d[i + 1] = v + 2;   // G
-d[i + 2] = v - 4;   // B
-d[i + 3] = 255;     // A
+const v  = 18 + Math.random() * 16 | 0;
+d[i]     = v + 8;
+d[i + 1] = v + 2;
+d[i + 2] = v - 4;
+d[i + 3] = 255;
 }
 sctx.putImageData(imageData, 0, 0);
-})();
+}
+
+buildSoil();
 
 // ─── RENDER ──────────────────────────────────────────────────────────────────
 function render() {
 ctx.clearRect(0, 0, W, H);
 
-// Clip all drawing to the jar silhouette
 ctx.save();
 ctx.clip(JAR);
-
-// Soil background
 ctx.drawImage(soilCanvas, 0, 0);
 
-// Live cells
 for (let row = 0; row < ROWS; row++) {
 for (let col = 0; col < COLS; col++) {
 if (!mask[idx(col, row)]) continue;
@@ -173,7 +184,6 @@ if (!grid[idx(col, row)]) continue;
   const x = col * CELL;
   const y = row * CELL;
 
-  // Radial glow around cell
   const grd = ctx.createRadialGradient(
     x + CELL / 2, y + CELL / 2, 0,
     x + CELL / 2, y + CELL / 2, CELL * 1.4
@@ -184,11 +194,9 @@ if (!grid[idx(col, row)]) continue;
   ctx.fillStyle = grd;
   ctx.fillRect(x - CELL, y - CELL, CELL * 3, CELL * 3);
 
-  // Core cell body
   ctx.fillStyle = '#e8973a';
   ctx.fillRect(x + 1, y + 1, CELL - 2, CELL - 2);
 
-  // Inner highlight (top-left corner)
   ctx.fillStyle = 'rgba(255,220,140,0.55)';
   ctx.fillRect(x + 2, y + 2, CELL - 5, 2);
 }
@@ -198,7 +206,6 @@ if (!grid[idx(col, row)]) continue;
 
 ctx.restore();
 
-// Jar outline
 ctx.save();
 ctx.strokeStyle = ‘rgba(140,100,50,0.55)’;
 ctx.lineWidth   = 1.5;
@@ -207,14 +214,12 @@ ctx.restore();
 }
 
 // ─── GLASS OVERLAY ───────────────────────────────────────────────────────────
-// Static layer — rendered once, composited on top of the simulation canvas.
 function renderGlass() {
 gctx.clearRect(0, 0, W, H);
 
 gctx.save();
 gctx.clip(JAR);
 
-// Left shine band
 const shineL = gctx.createLinearGradient(0, 0, W * 0.22, 0);
 shineL.addColorStop(0,    ‘rgba(255,255,255,0)’);
 shineL.addColorStop(0.4,  ‘rgba(200,230,255,0.07)’);
@@ -223,7 +228,6 @@ shineL.addColorStop(1,    ‘rgba(255,255,255,0)’);
 gctx.fillStyle = shineL;
 gctx.fillRect(0, 0, W * 0.22, H);
 
-// Right shine band (narrower)
 const shineR = gctx.createLinearGradient(W * 0.82, 0, W, 0);
 shineR.addColorStop(0,   ‘rgba(255,255,255,0)’);
 shineR.addColorStop(0.5, ‘rgba(200,230,255,0.05)’);
@@ -233,7 +237,6 @@ gctx.fillRect(W * 0.82, 0, W * 0.18, H);
 
 gctx.restore();
 
-// Subtle blue glow along the jar edge
 gctx.save();
 gctx.strokeStyle = ‘rgba(160,220,255,0.13)’;
 gctx.lineWidth   = 3;
@@ -242,6 +245,15 @@ gctx.restore();
 }
 
 renderGlass();
+
+// ─── RESIZE HANDLER ──────────────────────────────────────────────────────────
+window.addEventListener(‘resize’, () => {
+resizeCanvases();
+buildJar();
+buildMask();
+buildSoil();
+renderGlass();
+});
 
 // ─── MAIN LOOP ───────────────────────────────────────────────────────────────
 function loop(timestamp) {
@@ -257,15 +269,15 @@ requestAnimationFrame(loop);
 
 // ─── MOUSE INTERACTION ───────────────────────────────────────────────────────
 let painting   = false;
-let paintValue = 1; // 1 = draw live, 0 = draw dead
+let paintValue = 1;
 
 function cellAt(e) {
-const rect = canvas.getBoundingClientRect();
-const x    = e.clientX - rect.left;
-const y    = e.clientY - rect.top;
-const col  = Math.floor(x / CELL);
-const row  = Math.floor(y / CELL);
-return { col, row, x, y };
+const rect   = canvas.getBoundingClientRect();
+const scaleX = canvas.width  / rect.width;
+const scaleY = canvas.height / rect.height;
+const x = (e.clientX - rect.left) * scaleX;
+const y = (e.clientY - rect.top)  * scaleY;
+return { col: Math.floor(x / CELL), row: Math.floor(y / CELL), x, y };
 }
 
 function paint(e) {
@@ -321,3 +333,5 @@ btnPlay.classList.toggle(‘active’, running);
 
 btnReset.addEventListener(‘click’, () => { randomise(); });
 btnClear.addEventListener(‘click’, () => { clearGrid(); });
+
+}); // ─── END DOMContentLoaded ────────────────────────────────────────────────
