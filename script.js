@@ -1,4 +1,4 @@
-document.addEventListener(‘DOMContentLoaded’, () => {
+document.addEventListener('DOMContentLoaded', () => {
 
 // ─── CONFIG ──────────────────────────────────────────────────────────────────
 // Canvas internal resolution is fixed — CSS scales it visually.
@@ -12,10 +12,10 @@ const W       = COLS * CELL;  // 378px internal
 const H       = ROWS * CELL;  // 546px internal
 
 // ─── CANVAS SETUP ────────────────────────────────────────────────────────────
-const canvas = document.getElementById(‘c’);
-const glassC = document.getElementById(‘glass’);
-const ctx    = canvas.getContext(‘2d’);
-const gctx   = glassC.getContext(‘2d’);
+const canvas = document.getElementById('c');
+const glassC = document.getElementById('glass');
+const ctx    = canvas.getContext('2d');
+const gctx   = glassC.getContext('2d');
 
 // Fixed internal resolution — CSS handles visual scaling
 canvas.width  = glassC.width  = W;
@@ -92,7 +92,6 @@ for (let row = 0; row < ROWS; row++) {
 for (let col = 0; col < COLS; col++) {
 if (!mask[idx(col, row)]) { next[idx(col, row)] = 0; continue; }
 
-```
   let n = 0;
   for (let dr = -1; dr <= 1; dr++) {
     for (let dc = -1; dc <= 1; dc++) {
@@ -107,17 +106,15 @@ if (!mask[idx(col, row)]) { next[idx(col, row)] = 0; continue; }
   const alive = grid[idx(col, row)];
   next[idx(col, row)] = alive ? (n === 2 || n === 3 ? 1 : 0) : (n === 3 ? 1 : 0);
 }
-```
-
 }
 [grid, next] = [next, grid];
 }
 
 // ─── SOIL TEXTURE ────────────────────────────────────────────────────────────
-const soilCanvas = document.createElement(‘canvas’);
+const soilCanvas = document.createElement('canvas');
 soilCanvas.width  = W;
 soilCanvas.height = H;
-const sctx = soilCanvas.getContext(‘2d’);
+const sctx = soilCanvas.getContext('2d');
 
 (function buildSoil() {
 const id = sctx.createImageData(W, H);
@@ -144,7 +141,6 @@ for (let row = 0; row < ROWS; row++) {
 for (let col = 0; col < COLS; col++) {
 if (!mask[idx(col, row)] || !grid[idx(col, row)]) continue;
 
-```
   const x = col * CELL;
   const y = row * CELL;
 
@@ -164,14 +160,12 @@ if (!mask[idx(col, row)] || !grid[idx(col, row)]) continue;
   ctx.fillStyle = 'rgba(255,220,140,0.55)';
   ctx.fillRect(x + 2, y + 2, CELL - 5, 2);
 }
-```
-
 }
 
 ctx.restore();
 
 ctx.save();
-ctx.strokeStyle = ‘rgba(140,100,50,0.55)’;
+ctx.strokeStyle = 'rgba(140,100,50,0.55)';
 ctx.lineWidth   = 1.5;
 ctx.stroke(JAR);
 ctx.restore();
@@ -184,24 +178,24 @@ gctx.save();
 gctx.clip(JAR);
 
 const shineL = gctx.createLinearGradient(0, 0, W * 0.22, 0);
-shineL.addColorStop(0,    ‘rgba(255,255,255,0)’);
-shineL.addColorStop(0.4,  ‘rgba(200,230,255,0.07)’);
-shineL.addColorStop(0.75, ‘rgba(255,255,255,0.11)’);
-shineL.addColorStop(1,    ‘rgba(255,255,255,0)’);
+shineL.addColorStop(0,    'rgba(255,255,255,0)');
+shineL.addColorStop(0.4,  'rgba(200,230,255,0.07)');
+shineL.addColorStop(0.75, 'rgba(255,255,255,0.11)');
+shineL.addColorStop(1,    'rgba(255,255,255,0)');
 gctx.fillStyle = shineL;
 gctx.fillRect(0, 0, W * 0.22, H);
 
 const shineR = gctx.createLinearGradient(W * 0.82, 0, W, 0);
-shineR.addColorStop(0,   ‘rgba(255,255,255,0)’);
-shineR.addColorStop(0.5, ‘rgba(200,230,255,0.05)’);
-shineR.addColorStop(1,   ‘rgba(255,255,255,0)’);
+shineR.addColorStop(0,   'rgba(255,255,255,0)');
+shineR.addColorStop(0.5, 'rgba(200,230,255,0.05)');
+shineR.addColorStop(1,   'rgba(255,255,255,0)');
 gctx.fillStyle = shineR;
 gctx.fillRect(W * 0.82, 0, W * 0.18, H);
 
 gctx.restore();
 
 gctx.save();
-gctx.strokeStyle = ‘rgba(160,220,255,0.13)’;
+gctx.strokeStyle = 'rgba(160,220,255,0.13)';
 gctx.lineWidth   = 3;
 gctx.stroke(JAR);
 gctx.restore();
@@ -241,43 +235,43 @@ grid[idx(col, row)] = paintValue;
 let painting   = false;
 let paintValue = 1;
 
-canvas.addEventListener(‘mousedown’, e => {
+canvas.addEventListener('mousedown', e => {
 e.preventDefault();
 painting   = true;
 paintValue = e.button === 2 ? 0 : 1;
 paint(e);
 });
-canvas.addEventListener(‘mousemove’, e => { if (painting) paint(e); });
-canvas.addEventListener(‘mouseup’,    () => { painting = false; });
-canvas.addEventListener(‘mouseleave’, () => { painting = false; });
-canvas.addEventListener(‘contextmenu’, e => e.preventDefault());
+canvas.addEventListener('mousemove', e => { if (painting) paint(e); });
+canvas.addEventListener('mouseup',    () => { painting = false; });
+canvas.addEventListener('mouseleave', () => { painting = false; });
+canvas.addEventListener('contextmenu', e => e.preventDefault());
 
-canvas.addEventListener(‘touchstart’, e => {
+canvas.addEventListener('touchstart', e => {
 e.preventDefault();
 painting   = true;
 paintValue = 1;
 paint(e.touches[0]);
 }, { passive: false });
 
-canvas.addEventListener(‘touchmove’, e => {
+canvas.addEventListener('touchmove', e => {
 e.preventDefault();
 if (painting) paint(e.touches[0]);
 }, { passive: false });
 
-canvas.addEventListener(‘touchend’, () => { painting = false; });
+canvas.addEventListener('touchend', () => { painting = false; });
 
 // ─── CONTROLS ────────────────────────────────────────────────────────────────
-const btnPlay  = document.getElementById(‘btnPlay’);
-const btnReset = document.getElementById(‘btnReset’);
-const btnClear = document.getElementById(‘btnClear’);
+const btnPlay  = document.getElementById('btnPlay');
+const btnReset = document.getElementById('btnReset');
+const btnClear = document.getElementById('btnClear');
 
-btnPlay.addEventListener(‘click’, () => {
+btnPlay.addEventListener('click', () => {
 running = !running;
-btnPlay.textContent = running ? ‘⏸ Pause’ : ‘▶ Play’;
-btnPlay.classList.toggle(‘active’, running);
+btnPlay.textContent = running ? '⏸ Pause' : '▶ Play';
+btnPlay.classList.toggle('active', running);
 });
 
-btnReset.addEventListener(‘click’, () => { randomise(); });
-btnClear.addEventListener(‘click’, () => { clearGrid(); });
+btnReset.addEventListener('click', () => { randomise(); });
+btnClear.addEventListener('click', () => { clearGrid(); });
 
 }); // ─── END DOMContentLoaded ────────────────────────────────────────────────
