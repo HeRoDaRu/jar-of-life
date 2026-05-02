@@ -1,26 +1,15 @@
 document.addEventListener(‘DOMContentLoaded’, () => {
 
 // ─── CONFIG ──────────────────────────────────────────────────────────────────
-const FPS     = 12;    // simulation steps per second
-const DENSITY = 0.28;  // initial live cell probability
-
-// Jar grid proportions — width:height ratio stays fixed
-const COLS = 54;
-const ROWS = 78;
-
-// ─── RESPONSIVE SIZING ───────────────────────────────────────────────────────
-// Calculate the largest cell size that fits the available screen space.
-function computeCell() {
-const availW = window.innerWidth  * 0.92;
-const availH = window.innerHeight * 0.72;
-const byW    = Math.floor(availW / COLS);
-const byH    = Math.floor(availH / ROWS);
-return Math.max(3, Math.min(byW, byH));
-}
-
-let CELL = computeCell();
-let W    = COLS * CELL;
-let H    = ROWS * CELL;
+// Canvas internal resolution is fixed — CSS scales it visually.
+// This means CELL, COLS, ROWS never change after load.
+const CELL    = 7;
+const FPS     = 12;
+const DENSITY = 0.28;
+const COLS    = 54;
+const ROWS    = 78;
+const W       = COLS * CELL;  // 378px internal
+const H       = ROWS * CELL;  // 546px internal
 
 // ─── CANVAS SETUP ────────────────────────────────────────────────────────────
 const canvas = document.getElementById(‘c’);
@@ -28,22 +17,14 @@ const glassC = document.getElementById(‘glass’);
 const ctx    = canvas.getContext(‘2d’);
 const gctx   = glassC.getContext(‘2d’);
 
-function resizeCanvases() {
-CELL = computeCell();
-W    = COLS * CELL;
-H    = ROWS * CELL;
+// Fixed internal resolution — CSS handles visual scaling
 canvas.width  = glassC.width  = W;
 canvas.height = glassC.height = H;
-}
-
-resizeCanvases();
 
 // ─── JAR PATH ────────────────────────────────────────────────────────────────
-let JAR  = new Path2D();
-let mask = new Uint8Array(COLS * ROWS);
+const JAR = new Path2D();
 
-function buildJar() {
-JAR = new Path2D();
+(function buildJar() {
 const cx = W / 2;
 
 const neckHalf  = W * 0.14;
@@ -72,10 +53,11 @@ JAR.bezierCurveTo(cx - bellyHalf, yBellyTop, cx - neckHalf,  yBellyTop, cx - nec
 JAR.bezierCurveTo(cx - neckHalf,  yLip,      cx - lipHalf,   yLip,      cx - lipHalf,   yTop);
 
 JAR.closePath();
-}
+})();
 
-function buildMask() {
-mask = new Uint8Array(COLS * ROWS);
+// ─── CELL MASK ───────────────────────────────────────────────────────────────
+const mask = new Uint8Array(COLS * ROWS);
+
 for (let row = 0; row < ROWS; row++) {
 for (let col = 0; col < COLS; col++) {
 const px = col * CELL + CELL / 2;
@@ -85,10 +67,6 @@ mask[row * COLS + col] = 1;
 }
 }
 }
-}
-
-buildJar();
-buildMask();
 
 // ─── STATE ───────────────────────────────────────────────────────────────────
 let grid     = new Uint8Array(COLS * ROWS);
@@ -96,9 +74,7 @@ let next     = new Uint8Array(COLS * ROWS);
 let running  = true;
 let lastTick = 0;
 
-function idx(col, row) {
-return row * COLS + col;
-}
+function idx(col, row) { return row * COLS + col; }
 
 function randomise() {
 for (let i = 0; i < grid.length; i++) {
@@ -106,9 +82,7 @@ grid[i] = mask[i] && Math.random() < DENSITY ? 1 : 0;
 }
 }
 
-function clearGrid() {
-grid.fill(0);
-}
+function clearGrid() { grid.fill(0); }
 
 randomise();
 
@@ -116,45 +90,38 @@ randomise();
 function step() {
 for (let row = 0; row < ROWS; row++) {
 for (let col = 0; col < COLS; col++) {
-if (!mask[idx(col, row)]) {
-next[idx(col, row)] = 0;
-continue;
-}
+if (!mask[idx(col, row)]) { next[idx(col, row)] = 0; continue; }
 
 ```
-  let neighbours = 0;
+  let n = 0;
   for (let dr = -1; dr <= 1; dr++) {
     for (let dc = -1; dc <= 1; dc++) {
       if (dr === 0 && dc === 0) continue;
-      const r2 = row + dr;
-      const c2 = col + dc;
+      const r2 = row + dr, c2 = col + dc;
       if (r2 >= 0 && r2 < ROWS && c2 >= 0 && c2 < COLS) {
-        neighbours += grid[idx(c2, r2)];
+        n += grid[idx(c2, r2)];
       }
     }
   }
 
   const alive = grid[idx(col, row)];
-  next[idx(col, row)] = alive
-    ? (neighbours === 2 || neighbours === 3 ? 1 : 0)
-    : (neighbours === 3 ? 1 : 0);
+  next[idx(col, row)] = alive ? (n === 2 || n === 3 ? 1 : 0) : (n === 3 ? 1 : 0);
 }
 ```
 
 }
-
 [grid, next] = [next, grid];
 }
 
 // ─── SOIL TEXTURE ────────────────────────────────────────────────────────────
 const soilCanvas = document.createElement(‘canvas’);
-const sctx       = soilCanvas.getContext(‘2d’);
-
-function buildSoil() {
 soilCanvas.width  = W;
 soilCanvas.height = H;
-const imageData = sctx.createImageData(W, H);
-const d         = imageData.data;
+const sctx = soilCanvas.getContext(‘2d’);
+
+(function buildSoil() {
+const id = sctx.createImageData(W, H);
+const d  = id.data;
 for (let i = 0; i < d.length; i += 4) {
 const v  = 18 + Math.random() * 16 | 0;
 d[i]     = v + 8;
@@ -162,10 +129,8 @@ d[i + 1] = v + 2;
 d[i + 2] = v - 4;
 d[i + 3] = 255;
 }
-sctx.putImageData(imageData, 0, 0);
-}
-
-buildSoil();
+sctx.putImageData(id, 0, 0);
+})();
 
 // ─── RENDER ──────────────────────────────────────────────────────────────────
 function render() {
@@ -177,8 +142,7 @@ ctx.drawImage(soilCanvas, 0, 0);
 
 for (let row = 0; row < ROWS; row++) {
 for (let col = 0; col < COLS; col++) {
-if (!mask[idx(col, row)]) continue;
-if (!grid[idx(col, row)]) continue;
+if (!mask[idx(col, row)] || !grid[idx(col, row)]) continue;
 
 ```
   const x = col * CELL;
@@ -214,9 +178,8 @@ ctx.restore();
 }
 
 // ─── GLASS OVERLAY ───────────────────────────────────────────────────────────
-function renderGlass() {
+(function renderGlass() {
 gctx.clearRect(0, 0, W, H);
-
 gctx.save();
 gctx.clip(JAR);
 
@@ -242,18 +205,7 @@ gctx.strokeStyle = ‘rgba(160,220,255,0.13)’;
 gctx.lineWidth   = 3;
 gctx.stroke(JAR);
 gctx.restore();
-}
-
-renderGlass();
-
-// ─── RESIZE HANDLER ──────────────────────────────────────────────────────────
-window.addEventListener(‘resize’, () => {
-resizeCanvases();
-buildJar();
-buildMask();
-buildSoil();
-renderGlass();
-});
+})();
 
 // ─── MAIN LOOP ───────────────────────────────────────────────────────────────
 function loop(timestamp) {
@@ -267,14 +219,12 @@ requestAnimationFrame(loop);
 
 requestAnimationFrame(loop);
 
-// ─── MOUSE INTERACTION ───────────────────────────────────────────────────────
-let painting   = false;
-let paintValue = 1;
-
+// ─── INPUT: coordinate mapping ───────────────────────────────────────────────
+// Canvas is CSS-scaled, so we must map from CSS pixels → canvas pixels
 function cellAt(e) {
 const rect   = canvas.getBoundingClientRect();
-const scaleX = canvas.width  / rect.width;
-const scaleY = canvas.height / rect.height;
+const scaleX = W / rect.width;
+const scaleY = H / rect.height;
 const x = (e.clientX - rect.left) * scaleX;
 const y = (e.clientY - rect.top)  * scaleY;
 return { col: Math.floor(x / CELL), row: Math.floor(y / CELL), x, y };
@@ -288,23 +238,20 @@ if (!ctx.isPointInPath(JAR, x, y)) return;
 grid[idx(col, row)] = paintValue;
 }
 
+let painting   = false;
+let paintValue = 1;
+
 canvas.addEventListener(‘mousedown’, e => {
 e.preventDefault();
 painting   = true;
 paintValue = e.button === 2 ? 0 : 1;
 paint(e);
 });
-
-canvas.addEventListener(‘mousemove’, e => {
-if (!painting) return;
-paint(e);
-});
-
+canvas.addEventListener(‘mousemove’, e => { if (painting) paint(e); });
 canvas.addEventListener(‘mouseup’,    () => { painting = false; });
 canvas.addEventListener(‘mouseleave’, () => { painting = false; });
 canvas.addEventListener(‘contextmenu’, e => e.preventDefault());
 
-// ─── TOUCH INTERACTION ───────────────────────────────────────────────────────
 canvas.addEventListener(‘touchstart’, e => {
 e.preventDefault();
 painting   = true;
@@ -314,8 +261,7 @@ paint(e.touches[0]);
 
 canvas.addEventListener(‘touchmove’, e => {
 e.preventDefault();
-if (!painting) return;
-paint(e.touches[0]);
+if (painting) paint(e.touches[0]);
 }, { passive: false });
 
 canvas.addEventListener(‘touchend’, () => { painting = false; });
