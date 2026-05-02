@@ -4,235 +4,25 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Jar of Life</title>
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&display=swap');
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    :root {
-      --tunnel-live: #e8a045;
-      --tunnel-glow: #ff6b00;
-      --bg: #0d0804;
-    }
-    html, body {
-      width: 100%; height: 100dvh;
-      background: var(--bg);
-      display: flex; flex-direction: column;
-      align-items: center; justify-content: center;
-      overflow: hidden;
-      font-family: 'Cinzel', serif;
-      color: #c8a97e;
-    }
-    h1 {
-      font-size: 1rem; letter-spacing: 0.4em;
-      text-transform: uppercase; color: #8a6540;
-      margin-bottom: 12px; opacity: 0.7; flex-shrink: 0;
-    }
-    #hint {
-      font-size: 0.62rem; letter-spacing: 0.25em;
-      color: #5a3f22; margin-top: 10px; opacity: 0.9; flex-shrink: 0;
-    }
-    #controls { display: flex; gap: 14px; margin-bottom: 12px; flex-shrink: 0; }
-    button {
-      background: none; border: 1px solid #4a3010; color: #a07040;
-      font-family: 'Cinzel', serif; font-size: 0.62rem;
-      letter-spacing: 0.2em; padding: 6px 16px; cursor: pointer;
-      text-transform: uppercase;
-      transition: border-color 0.2s, color 0.2s, background 0.2s;
-      border-radius: 2px;
-    }
-    button:hover { border-color: var(--tunnel-live); color: var(--tunnel-live); }
-    button.active { background: #2a1500; border-color: var(--tunnel-glow); color: var(--tunnel-glow); }
-    #wrapper {
-      position: relative;
-      filter: drop-shadow(0 0 40px rgba(200,120,30,0.15));
-      flex-shrink: 1;
-      width: min(92vw, 45dvh);
-    }
-    #wrapper canvas {
-      display: block; width: 100%; height: auto; cursor: crosshair;
-    }
-    #glass {
-      position: absolute; top: 0; left: 0;
-      width: 100%; height: 100%; pointer-events: none;
-    }
-  </style>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-<h1>Jar of Life</h1>
-<div id="controls">
-  <button id="btnPlay" class="active">⏸ Pause</button>
-  <button id="btnReset">↺ Reset</button>
-  <button id="btnClear">✕ Clear</button>
-</div>
-<div id="wrapper">
-  <canvas id="c"></canvas>
-  <canvas id="glass"></canvas>
-</div>
-<div id="hint">LMB · draw life &nbsp;|&nbsp; RMB · erase &nbsp;|&nbsp; drag to paint</div>
+  <h1>Jar of Life</h1>
 
-<script>
-const CELL = 7, FPS = 12, DENSITY = 0.28;
-const COLS = 54, ROWS = 78;
-const W = COLS * CELL, H = ROWS * CELL;
+  <div id="controls">
+    <button id="btnPlay" class="active">⏸ Pause</button>
+    <button id="btnReset">↺ Reset</button>
+    <button id="btnClear">✕ Clear</button>
+  </div>
 
-const canvas = document.getElementById('c');
-const glassC = document.getElementById('glass');
-const ctx    = canvas.getContext('2d');
-const gctx   = glassC.getContext('2d');
+  <div id="wrapper">
+    <canvas id="c"></canvas>
+    <canvas id="glass"></canvas>
+  </div>
 
-canvas.width  = glassC.width  = W;
-canvas.height = glassC.height = H;
+  <div id="hint">LMB · draw life &nbsp;|&nbsp; RMB · erase &nbsp;|&nbsp; drag to paint</div>
 
-const JAR = new Path2D();
-(function() {
-  const cx = W/2;
-  const nH = W*0.14, lH = W*0.18, bH = W*0.42, bsH = W*0.38;
-  const yT = H*0.03, yL = H*0.07, yN = H*0.17;
-  const yBT = H*0.26, yBB = H*0.88, yBs = H*0.97;
-  JAR.moveTo(cx-lH, yT); JAR.lineTo(cx+lH, yT);
-  JAR.bezierCurveTo(cx+lH, yL, cx+nH, yL, cx+nH, yN);
-  JAR.bezierCurveTo(cx+nH, yBT, cx+bH, yBT, cx+bH, yBT+(yBB-yBT)*0.1);
-  JAR.bezierCurveTo(cx+bH, yBB, cx+bsH, yBB, cx+bsH, yBs);
-  JAR.lineTo(cx-bsH, yBs);
-  JAR.bezierCurveTo(cx-bsH, yBB, cx-bH, yBB, cx-bH, yBT+(yBB-yBT)*0.1);
-  JAR.bezierCurveTo(cx-bH, yBT, cx-nH, yBT, cx-nH, yN);
-  JAR.bezierCurveTo(cx-nH, yL, cx-lH, yL, cx-lH, yT);
-  JAR.closePath();
-})();
-
-const mask = new Uint8Array(COLS*ROWS);
-for (let r=0; r<ROWS; r++)
-  for (let c=0; c<COLS; c++)
-    if (ctx.isPointInPath(JAR, c*CELL+CELL/2, r*CELL+CELL/2))
-      mask[r*COLS+c] = 1;
-
-let grid = new Uint8Array(COLS*ROWS);
-let next = new Uint8Array(COLS*ROWS);
-let running = true, lastTick = 0;
-const idx = (c,r) => r*COLS+c;
-
-function randomise() {
-  for (let i=0; i<grid.length; i++)
-    grid[i] = mask[i] && Math.random()<DENSITY ? 1 : 0;
-}
-function clearGrid() { grid.fill(0); }
-randomise();
-
-function step() {
-  for (let r=0; r<ROWS; r++) {
-    for (let c=0; c<COLS; c++) {
-      if (!mask[idx(c,r)]) { next[idx(c,r)]=0; continue; }
-      let n=0;
-      for (let dr=-1; dr<=1; dr++)
-        for (let dc=-1; dc<=1; dc++) {
-          if (!dr&&!dc) continue;
-          const r2=r+dr, c2=c+dc;
-          if (r2>=0&&r2<ROWS&&c2>=0&&c2<COLS) n+=grid[idx(c2,r2)];
-        }
-      const a=grid[idx(c,r)];
-      next[idx(c,r)] = a ? (n===2||n===3?1:0) : (n===3?1:0);
-    }
-  }
-  [grid,next]=[next,grid];
-}
-
-const soil = document.createElement('canvas');
-soil.width=W; soil.height=H;
-const sc = soil.getContext('2d');
-(function() {
-  const id=sc.createImageData(W,H), d=id.data;
-  for (let i=0;i<d.length;i+=4) {
-    const v=18+Math.random()*16|0;
-    d[i]=v+8; d[i+1]=v+2; d[i+2]=v-4; d[i+3]=255;
-  }
-  sc.putImageData(id,0,0);
-})();
-
-function render() {
-  ctx.clearRect(0,0,W,H);
-  ctx.save(); ctx.clip(JAR);
-  ctx.drawImage(soil,0,0);
-  for (let r=0;r<ROWS;r++) {
-    for (let c=0;c<COLS;c++) {
-      if (!mask[idx(c,r)]||!grid[idx(c,r)]) continue;
-      const x=c*CELL, y=r*CELL;
-      const g=ctx.createRadialGradient(x+CELL/2,y+CELL/2,0,x+CELL/2,y+CELL/2,CELL*1.4);
-      g.addColorStop(0,'rgba(255,140,30,0.55)');
-      g.addColorStop(0.5,'rgba(200,90,10,0.18)');
-      g.addColorStop(1,'rgba(0,0,0,0)');
-      ctx.fillStyle=g;
-      ctx.fillRect(x-CELL,y-CELL,CELL*3,CELL*3);
-      ctx.fillStyle='#e8973a';
-      ctx.fillRect(x+1,y+1,CELL-2,CELL-2);
-      ctx.fillStyle='rgba(255,220,140,0.55)';
-      ctx.fillRect(x+2,y+2,CELL-5,2);
-    }
-  }
-  ctx.restore();
-  ctx.save();
-  ctx.strokeStyle='rgba(140,100,50,0.55)';
-  ctx.lineWidth=1.5;
-  ctx.stroke(JAR);
-  ctx.restore();
-}
-
-(function renderGlass() {
-  gctx.save(); gctx.clip(JAR);
-  const sL=gctx.createLinearGradient(0,0,W*0.22,0);
-  sL.addColorStop(0,'rgba(255,255,255,0)');
-  sL.addColorStop(0.4,'rgba(200,230,255,0.07)');
-  sL.addColorStop(0.75,'rgba(255,255,255,0.11)');
-  sL.addColorStop(1,'rgba(255,255,255,0)');
-  gctx.fillStyle=sL; gctx.fillRect(0,0,W*0.22,H);
-  const sR=gctx.createLinearGradient(W*0.82,0,W,0);
-  sR.addColorStop(0,'rgba(255,255,255,0)');
-  sR.addColorStop(0.5,'rgba(200,230,255,0.05)');
-  sR.addColorStop(1,'rgba(255,255,255,0)');
-  gctx.fillStyle=sR; gctx.fillRect(W*0.82,0,W*0.18,H);
-  gctx.restore();
-  gctx.save();
-  gctx.strokeStyle='rgba(160,220,255,0.13)';
-  gctx.lineWidth=3; gctx.stroke(JAR);
-  gctx.restore();
-})();
-
-function loop(ts) {
-  if (running && ts-lastTick > 1000/FPS) { step(); lastTick=ts; }
-  render();
-  requestAnimationFrame(loop);
-}
-requestAnimationFrame(loop);
-
-let painting=false, paintValue=1;
-function cellAt(e) {
-  const r=canvas.getBoundingClientRect();
-  const x=(e.clientX-r.left)*(W/r.width);
-  const y=(e.clientY-r.top)*(H/r.height);
-  return {col:Math.floor(x/CELL), row:Math.floor(y/CELL), x, y};
-}
-function paint(e) {
-  const {col,row,x,y}=cellAt(e);
-  if (col<0||col>=COLS||row<0||row>=ROWS) return;
-  if (!mask[idx(col,row)]) return;
-  if (!ctx.isPointInPath(JAR,x,y)) return;
-  grid[idx(col,row)]=paintValue;
-}
-canvas.addEventListener('mousedown',e=>{e.preventDefault();painting=true;paintValue=e.button===2?0:1;paint(e);});
-canvas.addEventListener('mousemove',e=>{if(painting)paint(e);});
-canvas.addEventListener('mouseup',()=>{painting=false;});
-canvas.addEventListener('mouseleave',()=>{painting=false;});
-canvas.addEventListener('contextmenu',e=>e.preventDefault());
-canvas.addEventListener('touchstart',e=>{e.preventDefault();painting=true;paintValue=1;paint(e.touches[0]);},{passive:false});
-canvas.addEventListener('touchmove',e=>{e.preventDefault();if(painting)paint(e.touches[0]);},{passive:false});
-canvas.addEventListener('touchend',()=>{painting=false;});
-
-document.getElementById('btnPlay').addEventListener('click',function(){
-  running=!running;
-  this.textContent=running?'⏸ Pause':'▶ Play';
-  this.classList.toggle('active',running);
-});
-document.getElementById('btnReset').addEventListener('click',()=>randomise());
-document.getElementById('btnClear').addEventListener('click',()=>clearGrid());
-</script>
+  <script src="script.js" defer></script>
 </body>
 </html>
